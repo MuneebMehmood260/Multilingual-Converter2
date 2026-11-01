@@ -1,0 +1,90 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LinguaLens - Multilingual Converter</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu&family=DM+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f6f6fb;--cd:#fff;--tx:#14141f;--mu:#6b6b80;--ac:#6d5ef0;--bd:#e2e2ee}
+:root[data-t=dark]{--bg:#0c0c14;--cd:#161622;--tx:#f0f0f8;--mu:#9a9ab0;--bd:#2a2a3c}
+@media(prefers-color-scheme:dark){:root:not([data-t=light]){--bg:#0c0c14;--cd:#161622;--tx:#f0f0f8;--mu:#9a9ab0;--bd:#2a2a3c}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 'DM Sans',system-ui,sans-serif}
+.w{max-width:820px;margin:0 auto;padding:16px}header{display:flex;justify-content:space-between;align-items:center;padding:8px 0}
+h1{margin:0;font-size:1.4rem;color:var(--ac)}.sub{color:var(--mu);margin:0 0 16px}
+.cd{background:var(--cd);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:14px}
+button{font:inherit;cursor:pointer;border:1px solid var(--bd);background:var(--cd);color:var(--tx);border-radius:10px;padding:8px 14px}
+button.on,.go{background:var(--ac);color:#fff;border-color:var(--ac)}.go{width:100%;padding:12px;font-weight:600}.go:disabled{opacity:.4;cursor:not-allowed}
+.row{display:flex;flex-wrap:wrap;gap:8px}.drop{border:2px dashed var(--bd);border-radius:12px;padding:28px;text-align:center;color:var(--mu)}.drop.dg{border-color:var(--ac)}
+textarea{width:100%;min-height:220px;background:transparent;color:var(--tx);border:1px solid var(--bd);border-radius:10px;padding:12px;font:inherit;line-height:1.9;resize:vertical}
+video,.prev img{max-width:100%;border-radius:10px}.prev{display:flex;gap:6px;flex-wrap:wrap}.prev img{height:70px}
+.mu{color:var(--mu);font-size:.9rem}.tag{background:var(--bd);border-radius:8px;padding:2px 10px;font-size:.85rem}
+.hi{padding:8px;border-bottom:1px solid var(--bd);cursor:pointer}[hidden]{display:none!important}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ac);color:#fff;padding:8px 16px;border-radius:10px}
+#pa{display:none}@media print{body>*{display:none!important}#pa{display:block!important;white-space:pre-wrap;font-size:14pt;line-height:2}}
+</style></head><body><div class="w">
+<header><h1>LinguaLens</h1><div class="row"><button onclick="hist()">History</button><button onclick="theme()">Theme</button></div></header>
+<p class="sub">Upload an image or PDF, or use your camera. AI reads the text and translates it.</p>
+<div id="home">
+<div class="cd"><div class="row" id="tabs"></div></div>
+<div class="cd"><b>Output language</b><div class="row" id="langs" style="margin-top:8px"></div></div>
+<div class="cd" id="p-image"><div class="drop" id="d1">Drop images here or <button onclick="fi.click()">Browse</button><input id="fi" type="file" accept="image/*" multiple hidden></div><div class="prev" id="pv"></div></div>
+<div class="cd" id="p-pdf" hidden><div class="drop" id="d2">Drop a PDF here or <button onclick="fp.click()">Browse</button><input id="fp" type="file" accept="application/pdf" hidden></div><p class="mu" id="pinfo"></p></div>
+<div class="cd" id="p-camera" hidden><video id="vid" autoplay playsinline muted hidden></video><img id="shot" hidden style="max-width:100%;border-radius:10px"><div class="row" style="margin-top:8px"><button onclick="camStart()">Start camera</button><button onclick="camSnap()">Capture</button><button onclick="camStop()">Stop</button></div></div>
+<button class="go" id="go" onclick="run()" disabled>Convert</button>
+<div class="cd" id="busy" hidden style="margin-top:14px"><b id="bt">Working...</b><p class="mu" id="bs"></p></div>
+<div class="cd" id="err" hidden style="margin-top:14px;border-color:#e5484d"></div>
+<div class="cd" id="out" hidden style="margin-top:14px">
+<div class="row" style="justify-content:space-between"><div class="row"><button id="vt" class="on" onclick="setView('t')">Translated</button><button id="vo" onclick="setView('o')">Original</button></div><span class="mu" id="st"></span></div>
+<textarea id="ta" spellcheck="false" style="margin-top:10px" oninput="edit()"></textarea>
+<div class="row" style="margin-top:10px"><button onclick="copy()">Copy</button><button onclick="dl()">Download TXT</button><button onclick="prt()">Print / PDF</button><button onclick="say()">Read aloud</button><button onclick="kw()">Keywords</button><button onclick="sum()">Summary</button><button onclick="reset()">New</button></div>
+<div id="kw" class="row" style="margin-top:10px"></div><p id="sm" class="mu"></p></div>
+</div>
+<div id="hist" hidden><div class="cd"><div class="row" style="justify-content:space-between"><b>History</b><div class="row"><button onclick="clr()">Clear</button><button onclick="back()">Back</button></div></div><div id="hl"></div></div></div>
+</div><div id="pa"></div><div id="toast" hidden></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+const $=id=>document.getElementById(id),LANGS=['Urdu','English','Arabic','Hindi','French','German','Spanish','Turkish','Persian','Chinese'],RTL=['Urdu','Arabic','Persian'],
+VOICE={Urdu:'ur-PK',English:'en-US',Arabic:'ar-SA',Hindi:'hi-IN',French:'fr-FR',German:'de-DE',Spanish:'es-ES',Turkish:'tr-TR',Persian:'fa-IR',Chinese:'zh-CN'};
+let lang='Urdu',tab='image',imgs=[],pdf=null,pdfFile=null,shot=null,stream=null,res={o:'',t:'',l:'Urdu'},view='t';
+const ls=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}};
+function toast(m){const t=$('toast');t.textContent=m;t.hidden=false;setTimeout(()=>t.hidden=true,2200)}
+function theme(){const r=document.documentElement,d=getComputedStyle(r).getPropertyValue('--bg').trim()==='#0c0c14';r.dataset.t=d?'light':'dark';try{localStorage.setItem('lt',r.dataset.t)}catch(e){}}
+try{const t=localStorage.getItem('lt');if(t)document.documentElement.dataset.t=t}catch(e){}
+$('tabs').innerHTML=['image','pdf','camera'].map(t=>`<button data-t="${t}" onclick="setTab('${t}')">${t[0].toUpperCase()+t.slice(1)}</button>`).join('');
+$('langs').innerHTML=LANGS.map(l=>`<button data-l="${l}" onclick="setLang('${l}')">${l}</button>`).join('');
+function setTab(t){tab=t;if(t!=='camera')camStop();['image','pdf','camera'].forEach(x=>$('p-'+x).hidden=x!==t);document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));ready()}
+function setLang(l){lang=l;document.querySelectorAll('#langs button').forEach(b=>b.classList.toggle('on',b.dataset.l===l));$('go').textContent='Convert to '+l}
+setTab('image');setLang('Urdu');
+function ready(){$('go').disabled=!(tab==='image'?imgs.length:tab==='pdf'?pdf:shot)}
+function setImgs(fs){imgs=[...fs].filter(f=>f.type.startsWith('image/'));$('pv').innerHTML='';imgs.forEach(f=>{const i=new Image();i.src=URL.createObjectURL(f);$('pv').append(i)});ready()}
+async function setPdf(f){if(!f||f.type!=='application/pdf')return;pdfFile=f;try{pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;$('pinfo').textContent=`${f.name} - ${pdf.numPages} pages`+(pdf.numPages>15?' (first 15 will be converted)':'')}catch(e){pdf=null;$('pinfo').textContent='Could not read this PDF'}ready()}
+$('fi').onchange=e=>setImgs(e.target.files);$('fp').onchange=e=>setPdf(e.target.files[0]);
+[['d1',f=>setImgs(f)],['d2',f=>setPdf(f[0])]].forEach(([id,fn])=>{const d=$(id);d.ondragover=e=>{e.preventDefault();d.classList.add('dg')};d.ondragleave=()=>d.classList.remove('dg');d.ondrop=e=>{e.preventDefault();d.classList.remove('dg');fn(e.dataTransfer.files)}});
+function jpeg(src,w,h){const s=Math.min(1,1600/Math.max(w,h)),c=document.createElement('canvas');c.width=Math.round(w*s);c.height=Math.round(h*s);c.getContext('2d').drawImage(src,0,0,c.width,c.height);return c.toDataURL('image/jpeg',.85)}
+async function camStart(){try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});$('vid').srcObject=stream;$('vid').hidden=false;$('shot').hidden=true}catch(e){toast('Camera not available (needs HTTPS and permission)')}}
+function camStop(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}$('vid').hidden=true}
+function camSnap(){const v=$('vid');if(!stream||!v.videoWidth)return;shot=jpeg(v,v.videoWidth,v.videoHeight);$('shot').src=shot;$('shot').hidden=false;camStop();ready()}
+function jobs(){if(tab==='image')return imgs.map(f=>async()=>{const b=await createImageBitmap(f);return jpeg(b,b.width,b.height)});
+ if(tab==='pdf')return Array.from({length:Math.min(pdf.numPages,15)},(_,i)=>async()=>{const p=await pdf.getPage(i+1),vp=p.getViewport({scale:2}),c=document.createElement('canvas');c.width=vp.width;c.height=vp.height;await p.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;return jpeg(c,c.width,c.height)});
+ return [async()=>shot]}
+async function run(){const J=jobs(),O=[],T=[];let fail=0,why='';$('home').querySelectorAll('.cd').forEach(()=>{});$('err').hidden=true;$('out').hidden=true;$('busy').hidden=false;$('go').disabled=true;
+ for(let i=0;i<J.length;i++){$('bs').textContent=`Page ${i+1} of ${J.length}`;
+  try{const image=await J[i](),r=await fetch('/api/convert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image,lang})}),d=await r.json();if(!r.ok)throw new Error(d.error||'Server error');if(d.original){O.push(d.original);T.push(d.translated)}}catch(e){fail++;why=e.message}}
+ $('busy').hidden=true;ready();
+ if(!O.length){$('err').textContent=fail?`Conversion failed: ${why}`:'No readable text found.';$('err').hidden=false;return}
+ const j=a=>a.length>1?a.map((x,i)=>`--- Page ${i+1} ---\n${x}`).join('\n\n'):a[0];
+ res={o:j(O),t:j(T),l:lang};if(fail)toast(`${fail} page(s) failed: ${why}`);
+ const h=ls('lh',[]);h.unshift({id:Date.now(),d:new Date().toLocaleString(),...res});try{localStorage.setItem('lh',JSON.stringify(h.slice(0,20)))}catch(e){}
+ show()}
+function show(){$('out').hidden=false;$('home').hidden=false;$('hist').hidden=true;['kw','sm'].forEach(i=>$(i).textContent='');setView('t')}
+function setView(v){view=v;$('vt').classList.toggle('on',v==='t');$('vo').classList.toggle('on',v==='o');const t=$('ta');t.value=res[v];t.dir=v==='t'&&RTL.includes(res.l)?'rtl':'auto';t.style.fontFamily=v==='t'&&['Urdu','Persian'].includes(res.l)?"'Noto Nastaliq Urdu',serif":'';stats()}
+function edit(){res[view]=$('ta').value;stats()}
+function stats(){const v=$('ta').value.trim();$('st').textContent=`${v?v.split(/\s+/).length:0} words, ${v.length} chars`}
+const txt=()=>$('ta').value;
+function copy(){navigator.clipboard.writeText(txt()).then(()=>toast('Copied'),()=>toast('Copy failed'))}
+function dl(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt()],{type:'text/plain;charset=utf-8'}));a.download=`lingualens-${res.l}.txt`;a.click()}
+function prt(){$('pa').textContent=txt();$('pa').dir=$('ta').dir;window.print()}
+function say(){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(txt());u.lang=view==='t'?VOICE[res.l]||'en-US':'';speechSynthesis.speak(u)}
+function kw(){const f={};(txt().match(/[\p{L}\p{N}]{4,}/gu)||[]).forEach(w=>{w=w.toLowerCase();f[w]=(f[w]||0)+1});const k=$('kw');k.textContent='';Object.entries(f).sort((a,b)=>b[1]-a[1]).slice(0,12).forEach(([w])=>{const s=document.createElement('span');s.className='tag';s.textContent=w;k.append(s)})}
+async function sum(){$('sm').textContent='Summarizing...';try{const r=await fetch('/api/summarize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:txt(),lang:view==='t'?res.l:'English'})}),d=await r.json();$('sm').textContent=r.ok?d.summary:d.error}catch(e){$('sm').textContent='Summary failed'}}
+function reset(){imgs=[];pdf=null;shot=null;$('pv').innerHTML='';$('pinfo').textContent='';$('shot').hidden=true;$('fi').value=$('fp').value='';$('out').hidden=true;ready()}
+function hist(){$('home').hidden=true;$('hist').hidden=false;const L=$('hl');L.textContent='';const h=ls('lh',[]);if(!h.length)L.textContent='No conversions yet.';h.forEach(x=>{const d=document.createElement('div');d.className='hi';d.textContent=`${x.l} - ${x.d} - ${x.t.slice(0,70)}`;d.onclick=()=>{res={o:x.o,t:x.t,l:x.l};show()};L.append(d)})}
+function back(){$('home').hidden=false;$('hist').hidden=true}
+function clr(){localStorage.removeItem('lh');hist()}
+</script></body></html>
