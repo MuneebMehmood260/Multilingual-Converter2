@@ -1,1 +1,1 @@
-{"name":"lingualens","version":"2.0.0","private":true,"description":"LinguaLens - multilingual image/PDF OCR and translation","engines":{"node":"20.x"}}
+{"name":"lingualens","version":"2.0.0","private":true,"description":"LinguaLens - multilingual image/PDF OCR and translation","engines":{"node":"26.x"}}
